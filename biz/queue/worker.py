@@ -8,6 +8,7 @@ from biz.gitlab.webhook_handler import filter_changes, MergeRequestHandler, Push
 from biz.github.webhook_handler import filter_changes as filter_github_changes, PullRequestHandler as GithubPullRequestHandler, PushHandler as GithubPushHandler
 from biz.gitea.webhook_handler import filter_changes as filter_gitea_changes, PullRequestHandler as GiteaPullRequestHandler, \
     PushHandler as GiteaPushHandler
+from biz.svn.webhook_handler import filter_changes as filter_svn_changes, CommitHandler as SvnCommitHandler, slugify_url as svn_slugify_url
 from biz.service.review_service import ReviewService
 from biz.utils.code_reviewer import CodeReviewer
 from biz.utils.im import notifier
@@ -434,5 +435,99 @@ def handle_gitea_pull_request_event(webhook_data: dict, gitea_token: str, gitea_
 
     except Exception as e:
         error_message = f'AI Code Review 服务出现未知错误: {str(e)}\n{traceback.format_exc()}'
+        notifier.send_notification(content=error_message)
+        logger.error('出现未知错误: %s', error_message)
+
+
+def handle_svn_commit_event(webhook_data: dict, token: str = None, url: str = None, url_slug: str = None):
+    """
+    处理SVN提交事件
+    
+    :param webhook_data: webhook数据
+    :param svn_repo_url: SVN仓库URL
+    :param svn_username: SVN用户名
+    :param svn_password: SVN密码
+    """
+    push_review_enabled = os.environ.get('PUSH_REVIEW_ENABLED', '0') == '1'
+    try:
+        # 从webhook_data或参数中获取SVN配置
+        svn_repo_url = url or webhook_data.get('repository_url')
+        svn_username = webhook_data.get('svn_username')
+        svn_password = webhook_data.get('svn_password')
+        
+        handler = SvnCommitHandler(webhook_data, svn_repo_url, svn_username, svn_password)
+        # TODO: 调试代码 - 调试完成后应删除或改为DEBUG级别
+        logger.info('SVN Commit event received')  # DEBUG: 用于跟踪事件接收
+        
+        # 获取提交信息
+        commit_info = handler.get_commit_info()
+        if not commit_info:
+            logger.error('Failed to get commit info')
+            return
+        
+        # 将提交信息转换为commits格式（兼容现有系统）
+        commits = [{
+            'message': commit_info.get('message', ''),
+            'author': commit_info.get('author', ''),
+            'timestamp': commit_info.get('timestamp', ''),
+            'id': commit_info.get('id', ''),
+            'url': f"{handler.repository_url}?revision={commit_info.get('revision')}"
+        }]
+        
+        review_result = None
+        score = 0
+        additions = 0
+        deletions = 0
+        
+        if push_review_enabled:
+            # 获取SVN提交的changes
+            changes = handler.get_commit_changes()
+            # TODO: 调试代码 - 调试完成后应删除或改为DEBUG级别
+            logger.info('changes: %s', changes)  # DEBUG: 打印changes列表用于调试
+            changes = filter_svn_changes(changes)
+            
+            if not changes:
+                logger.info('未检测到SVN提交代码的修改,修改文件可能不满足SUPPORTED_EXTENSIONS。')
+                review_result = "关注的文件没有修改"
+            else:
+                commits_text = commit_info.get('message', '').strip()
+                review_result = CodeReviewer().review_and_strip_code(str(changes), commits_text)
+                score = CodeReviewer.parse_review_score(review_text=review_result)
+                for item in changes:
+                    additions += item.get('additions', 0)
+                    deletions += item.get('deletions', 0)
+            
+            # SVN不支持在提交后添加注释，但可以记录日志
+            handler.add_commit_notes(f'Auto Review Result: \n{review_result}')
+        
+        # 从webhook数据或仓库URL中提取项目名称
+        project_name = webhook_data.get('project_name') or webhook_data.get('repository_name')
+        if not project_name and handler.repository_url:
+            # 从URL中提取项目名称
+            from urllib.parse import urlparse
+            parsed_url = urlparse(handler.repository_url)
+            path_parts = [p for p in parsed_url.path.split('/') if p]
+            project_name = path_parts[-1] if path_parts else 'unknown'
+        
+        # 生成URL slug
+        svn_url_slug = svn_slugify_url(handler.repository_url) if handler.repository_url else 'svn_repo'
+        
+        # 发送push_reviewed事件（SVN提交类似Git Push）
+        event_manager['push_reviewed'].send(PushReviewEntity(
+            project_name=project_name or 'unknown',
+            author=commit_info.get('author', 'unknown'),
+            branch='trunk',  # SVN默认分支，实际可能从webhook中获取
+            updated_at=int(datetime.now().timestamp()),
+            commits=commits,
+            score=score,
+            review_result=review_result,
+            url_slug=svn_url_slug,
+            webhook_data=webhook_data,
+            additions=additions,
+            deletions=deletions,
+        ))
+        
+    except Exception as e:
+        error_message = f'SVN代码审查服务出现未知错误: {str(e)}\n{traceback.format_exc()}'
         notifier.send_notification(content=error_message)
         logger.error('出现未知错误: %s', error_message)

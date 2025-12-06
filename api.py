@@ -15,7 +15,7 @@ from flask import Flask, request, jsonify
 
 from biz.gitlab.webhook_handler import slugify_url
 from biz.queue.worker import handle_merge_request_event, handle_push_event, handle_github_pull_request_event, \
-    handle_github_push_event, handle_gitea_pull_request_event, handle_gitea_push_event
+    handle_github_push_event, handle_gitea_pull_request_event, handle_gitea_push_event, handle_svn_commit_event
 from biz.service.review_service import ReviewService
 from biz.utils.im import notifier
 from biz.utils.log import logger
@@ -115,8 +115,12 @@ def handle_webhook():
         # 判断webhook来源
         webhook_source_github = request.headers.get('X-GitHub-Event')
         webhook_source_gitea = request.headers.get('X-Gitea-Event')
+        webhook_source_svn = request.headers.get('X-SVN-Event') or request.headers.get('X-Subversion-Event')
 
-        if webhook_source_gitea:  # Gitea webhook优先处理
+        # 检查是否是SVN webhook（通过header或请求体中的字段判断）
+        if webhook_source_svn or data.get('revision') or data.get('svn_revision'):
+            return handle_svn_webhook(data)
+        elif webhook_source_gitea:  # Gitea webhook优先处理
             return handle_gitea_webhook(webhook_source_gitea, data)
         elif webhook_source_github:  # GitHub webhook
             return handle_github_webhook(webhook_source_github, data)
@@ -230,6 +234,56 @@ def handle_gitea_webhook(event_type, data):
         error_message = f'Only pull_request and push events are supported for Gitea webhook, but received: {event_type}.'
         logger.error(error_message)
         return jsonify(error_message), 400
+
+
+def handle_svn_webhook(data):
+    """
+    处理SVN webhook请求
+    SVN post-commit hook通常发送的数据包含：
+    - repository_url: SVN仓库URL
+    - revision: 提交版本号
+    - author: 提交者
+    - message: 提交消息
+    - timestamp: 提交时间
+    """
+    # 获取SVN配置
+    svn_repo_url = os.getenv('SVN_REPO_URL') or data.get('repository_url')
+    svn_username = os.getenv('SVN_USERNAME') or data.get('svn_username')
+    svn_password = os.getenv('SVN_PASSWORD') or data.get('svn_password')
+    
+    # 将SVN配置信息添加到webhook数据中，以便在handler中使用
+    if svn_repo_url and not data.get('repository_url'):
+        data['repository_url'] = svn_repo_url
+    if svn_username and not data.get('svn_username'):
+        data['svn_username'] = svn_username
+    if svn_password and not data.get('svn_password'):
+        data['svn_password'] = svn_password
+    
+    # 如果webhook中没有提供仓库URL，尝试从环境变量获取
+    if not data.get('repository_url'):
+        logger.warn('SVN repository URL not found in webhook data or environment variables')
+        # 不强制要求，因为handler中会尝试从webhook数据中获取
+    
+    # TODO: 调试代码 - 调试完成后应删除或改为DEBUG级别
+    logger.info(f'Received SVN webhook event')
+    logger.info(f'Payload: {json.dumps(data)}')  # DEBUG: 打印完整payload用于调试
+    
+    # 验证必要字段
+    if not data.get('revision') and not data.get('svn_revision'):
+        error_message = 'Missing revision number in SVN webhook data'
+        logger.error(error_message)
+        return jsonify({'message': error_message}), 400
+    
+    # 生成URL slug用于队列
+    from biz.svn.webhook_handler import slugify_url as svn_slugify_url
+    svn_url_slug = svn_slugify_url(data.get('repository_url', 'svn_repo'))
+    
+    # 使用handle_queue进行异步处理（将认证信息放入data中，url_slug使用svn_url_slug）
+    # 注意：handle_queue期望的签名是 (function, data, token, url, url_slug)
+    # 对于SVN，我们将svn_repo_url作为url参数传递，token参数不使用
+    handle_queue(handle_svn_commit_event, data, '', svn_repo_url or '', svn_url_slug)
+    # 立马返回响应
+    return jsonify({'message': 'SVN webhook received, will process asynchronously.'}), 200
 
 
 if __name__ == '__main__':

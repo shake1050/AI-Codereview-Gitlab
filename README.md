@@ -11,7 +11,7 @@
 - 📢 消息即时推送
   - 审查结果一键直达 钉钉、企业微信 或 飞书，代码问题无处可藏！
 - 📅 自动化日报生成
-  - 基于 GitLab & GitHub & Gitea Commit 记录，自动整理每日开发进展，谁在摸鱼、谁在卷，一目了然 😼。
+  - 基于 GitLab & GitHub & Gitea & SVN Commit 记录，自动整理每日开发进展，谁在摸鱼、谁在卷，一目了然 😼。
 - 📊 可视化 Dashboard
   - 集中展示所有 Code Review 记录，项目统计、开发者统计，数据说话，甩锅无门！
 - 🎭 Review Style 任你选
@@ -30,9 +30,9 @@
 
 ## 原理
 
-当用户在 GitLab 上提交代码（如 Merge Request 或 Push 操作）时，GitLab 将自动触发 webhook
+当用户在 GitLab/GitHub/Gitea 上提交代码（如 Merge Request 或 Push 操作）时，或当用户在 SVN 上提交代码时，系统将自动触发 webhook
 事件，调用本系统的接口。系统随后通过第三方大模型对代码进行审查，并将审查结果直接反馈到对应的 Merge Request 或 Commit 的
-Note 中，便于团队查看和处理。
+Note 中（SVN通过日志记录），便于团队查看和处理。
 
 ![流程图](doc/img/open/process.png)
 
@@ -159,6 +159,26 @@ streamlit run ui.py --server.port=5002 --server.address=0.0.0.0
 - Header：`X-Gitea-Token` 设置为 `.env` 中的 `GITEA_ACCESS_TOKEN`（可选）
 - 触发事件：勾选 `Push events` 与 `Pull Request events`
 - Content Type：`application/json`
+
+### 配置 SVN Webhook
+
+SVN通过post-commit hook触发代码审查。详细配置说明请参考：[SVN Webhook 接入说明](doc/svn_webhook_setup.md)
+
+#### 快速配置步骤：
+
+1. **配置环境变量**：在 `conf/.env` 中添加：
+   ```bash
+   PUSH_REVIEW_ENABLED=1  # 启用提交审查
+   SVN_REPO_URL=svn://your-svn-server.com/repo  # SVN仓库URL（可选）
+   SVN_USERNAME=your_username  # SVN认证用户名（如果需要）
+   SVN_PASSWORD=your_password  # SVN认证密码（如果需要）
+   ```
+
+2. **创建post-commit hook**：在SVN仓库的 `hooks` 目录下创建 `post-commit` 脚本，发送webhook到审查系统。
+
+3. **测试提交**：提交代码验证webhook是否正常工作。
+
+更多详细信息、示例脚本和常见问题，请查看 [SVN Webhook 接入说明文档](doc/svn_webhook_setup.md)。
 
 ### 配置消息推送
 

@@ -3,10 +3,10 @@ import os
 import re
 from typing import Dict, Any, List
 
-import yaml
 from jinja2 import Template
 
 from biz.llm.factory import Factory
+from biz.service.rule_service import RuleService
 from biz.utils.log import logger
 from biz.utils.token_util import count_tokens, truncate_text_by_tokens
 
@@ -16,28 +16,27 @@ class BaseReviewer(abc.ABC):
 
     def __init__(self, prompt_key: str):
         self.client = Factory().getClient()
-        self.prompts = self._load_prompts(prompt_key, os.getenv("REVIEW_STYLE", "professional"))
+        self.prompt_key = prompt_key
+        self.style = os.getenv("REVIEW_STYLE", "professional")
 
-    def _load_prompts(self, prompt_key: str, style="professional") -> Dict[str, Any]:
-        """加载提示词配置"""
-        prompt_templates_file = "conf/prompt_templates.yml"
+    def _load_prompts(self) -> Dict[str, Any]:
+        """
+        加载提示词配置
+        优先从数据库加载，失败则从YAML加载
+        """
         try:
-            # 在打开 YAML 文件时显式指定编码为 UTF-8，避免使用系统默认的 GBK 编码。
-            with open(prompt_templates_file, "r", encoding="utf-8") as file:
-                prompts = yaml.safe_load(file).get(prompt_key, {})
-
-                # 使用Jinja2渲染模板
-                def render_template(template_str: str) -> str:
-                    return Template(template_str).render(style=style)
-
-                system_prompt = render_template(prompts["system_prompt"])
-                user_prompt = render_template(prompts["user_prompt"])
-
-                return {
-                    "system_message": {"role": "system", "content": system_prompt},
-                    "user_message": {"role": "user", "content": user_prompt},
-                }
-        except (FileNotFoundError, KeyError, yaml.YAMLError) as e:
+            # 从 RuleService 获取规则
+            rule_data = RuleService.get_rule(self.prompt_key, self.style)
+            
+            # 使用Jinja2渲染模板
+            system_prompt = Template(rule_data['system_prompt']).render(style=self.style)
+            user_prompt = Template(rule_data['user_prompt']).render(style=self.style)
+            
+            return {
+                "system_message": {"role": "system", "content": system_prompt},
+                "user_message": {"role": "user", "content": user_prompt},
+            }
+        except Exception as e:
             logger.error(f"加载提示词配置失败: {e}")
             raise Exception(f"提示词配置加载失败: {e}")
 
@@ -86,12 +85,15 @@ class CodeReviewer(BaseReviewer):
         return review_result
 
     def review_code(self, diffs_text: str, commits_text: str = "") -> str:
-        """Review 代码并返回结果"""
+        """Review 代码并返回结果，每次审查时重新加载规则"""
+        # 每次审查时重新加载规则，实现热更新
+        prompts = self._load_prompts()
+        
         messages = [
-            self.prompts["system_message"],
+            prompts["system_message"],
             {
                 "role": "user",
-                "content": self.prompts["user_message"]["content"].format(
+                "content": prompts["user_message"]["content"].format(
                     diffs_text=diffs_text, commits_text=commits_text
                 ),
             },

@@ -4,7 +4,7 @@ import pandas as pd
 from biz.service.review_service import ReviewService
 
 # 设置页面配置
-st.set_page_config(layout="wide", page_title="Review详情", page_icon="📋")
+st.set_page_config(layout="wide", page_title="审查详情", page_icon="📋")
 
 # 获取URL参数
 query_params = st.query_params

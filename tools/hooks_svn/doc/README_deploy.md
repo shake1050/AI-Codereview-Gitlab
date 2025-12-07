@@ -4,9 +4,8 @@
 
 ## 文件说明
 
-- `deploy_hooks_to_all_repos.ps1` - PowerShell 版本（推荐，功能更强大）
 - `deploy_hooks_to_all_repos.bat` - 批处理版本（兼容性更好）
-- `post_commit.bat` - Post-commit hook 批处理脚本
+- `post-commit.bat` - Post-commit hook 批处理脚本
 - `svn_post_commit_hook.py` - Post-commit hook Python 脚本
 
 ## 使用方法

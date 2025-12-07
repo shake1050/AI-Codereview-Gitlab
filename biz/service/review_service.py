@@ -111,11 +111,52 @@ class ReviewService:
                         pass
 
                     conn.commit()
+                    
+                    # 创建审查规则表
+                    cursor.execute('''
+                            CREATE TABLE IF NOT EXISTS review_rules (
+                                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                                rule_key TEXT NOT NULL UNIQUE,
+                                system_prompt TEXT NOT NULL,
+                                user_prompt TEXT NOT NULL,
+                                description TEXT,
+                                is_active INTEGER DEFAULT 1,
+                                created_at INTEGER NOT NULL,
+                                updated_at INTEGER NOT NULL,
+                                updated_by TEXT
+                            )
+                        ''')
+                    
+                    # 创建规则历史记录表
+                    cursor.execute('''
+                            CREATE TABLE IF NOT EXISTS review_rules_history (
+                                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                                rule_id INTEGER NOT NULL,
+                                rule_key TEXT NOT NULL,
+                                system_prompt_old TEXT,
+                                system_prompt_new TEXT,
+                                user_prompt_old TEXT,
+                                user_prompt_new TEXT,
+                                change_type TEXT NOT NULL,
+                                changed_at INTEGER NOT NULL,
+                                changed_by TEXT,
+                                change_reason TEXT,
+                                FOREIGN KEY (rule_id) REFERENCES review_rules(id)
+                            )
+                        ''')
+                    
+                    conn.commit()
+                    
                     # 添加时间字段索引（默认查询就需要时间范围）
                     try:
                         conn.execute('CREATE INDEX IF NOT EXISTS idx_push_review_log_updated_at ON '
                                      'push_review_log (updated_at);')
                         conn.execute('CREATE INDEX IF NOT EXISTS idx_mr_review_log_updated_at ON mr_review_log (updated_at);')
+                        # 添加规则表索引
+                        conn.execute('CREATE INDEX IF NOT EXISTS idx_review_rules_key ON review_rules(rule_key);')
+                        conn.execute('CREATE INDEX IF NOT EXISTS idx_review_rules_active ON review_rules(is_active);')
+                        conn.execute('CREATE INDEX IF NOT EXISTS idx_rules_history_rule_id ON review_rules_history(rule_id);')
+                        conn.execute('CREATE INDEX IF NOT EXISTS idx_rules_history_changed_at ON review_rules_history(changed_at);')
                         conn.commit()
                     except sqlite3.DatabaseError:
                         # 索引创建失败不影响，继续

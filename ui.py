@@ -39,7 +39,7 @@ st.set_page_config(layout="wide", page_title="AI代码审查平台", page_icon="
 env_path = PROJECT_ROOT / "conf" / ".env"
 load_dotenv(env_path)
 
-DETAIL_PAGE_PATH = "/review_detail"
+DETAIL_PAGE_PATH = "/审查详情"
 DETAIL_COLUMN_NAME = "详细信息"
 HIDDEN_COLUMNS = ['id', 'review_result']
 JS_INIT_DELAYS = [100, 500]

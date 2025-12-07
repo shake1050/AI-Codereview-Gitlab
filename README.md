@@ -180,6 +180,24 @@ SVN通过post-commit hook触发代码审查。详细配置说明请参考：[SVN
 
 更多详细信息、示例脚本和常见问题，请查看 [SVN Webhook 接入说明文档](doc/svn_webhook_setup.md)。
 
+#### VisualSVN Server 快速接入：
+
+1. **使用一键部署脚本**（推荐）：
+   ```powershell
+   # 以管理员身份运行 PowerShell
+   cd tools\hooks_svn
+   .\deploy_hooks_to_all_repos.ps1
+   ```
+
+2. **手动配置**：
+   - 将 `tools\hooks_svn\post-commit.bat` 和 `svn_post_commit_hook.py` 复制到仓库的 `hooks` 目录
+   - 编辑 `svn_post_commit_hook.py`，配置 `REVIEW_API_URL` 和 `REPO_URL`
+
+3. **配置环境变量**（可选）：
+   - 在系统环境变量或 VisualSVN Server 服务环境变量中设置 `SVN_REVIEW_API_URL` 和 `SVN_REPO_URL_PREFIX`
+
+详细配置说明请参考：[VisualSVN Server Hook 配置说明](tools/hooks_svn/doc/visualsvn_server_setup.md)
+
 ### 配置消息推送
 
 #### 1.配置钉钉推送

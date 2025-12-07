@@ -256,7 +256,12 @@ def _create_bar_chart(df, x_col, y_col, colormap='tab20', use_mean=False):
         st.info("没有数据可供展示")
         return
     if use_mean:
-        data = df.groupby(x_col)[y_col].mean().reset_index()
+        # 排除0分记录后再计算平均值
+        df_filtered = df[df[y_col] != 0] if y_col in df.columns else df
+        if df_filtered.empty:
+            st.info("没有数据可供展示")
+            return
+        data = df_filtered.groupby(x_col)[y_col].mean().reset_index()
         data.columns = [x_col, y_col]
         y_values = data[y_col]
     else:
@@ -367,7 +372,13 @@ def main_page():
                 _render_detail_links_script()
             else:
                 st.dataframe(display_df, use_container_width=True, column_config=column_config, hide_index=True)
-            st.markdown(f"**总记录数:** {len(df)}，**平均得分:** {df['score'].mean():.2f}" if not df.empty else "**总记录数:** 0，**平均得分:** 0.00")
+            if not df.empty and 'score' in df.columns:
+                df_non_zero = df[df['score'] != 0]
+                avg_score = df_non_zero['score'].mean() if not df_non_zero.empty else 0.0
+                avg_score_text = f"{avg_score:.2f}" if not df_non_zero.empty else "0.00"
+            else:
+                avg_score_text = "0.00"
+            st.markdown(f"**总记录数:** {len(df)}，**平均得分:** {avg_score_text}" if not df.empty else "**总记录数:** 0，**平均得分:** 0.00")
             row1, row2, row3, row4 = st.columns(4)
             for col, title, func in [(row1, "项目提交统计", generate_project_count_chart),
                                      (row2, "项目平均得分", generate_project_score_chart),

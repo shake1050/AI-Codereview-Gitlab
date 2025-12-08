@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import streamlit as st
 import pandas as pd
+from datetime import datetime
 from biz.service.review_service import ReviewService
 
 # 设置页面配置
@@ -39,6 +40,18 @@ review_result = row.get('review_result', '')
 project_name = row.get('project_name', '未知项目')
 author = row.get('author', '未知作者')
 updated_at = row.get('updated_at', '')
+
+# 转换时间戳为可读格式
+if updated_at:
+    try:
+        # 尝试转换为整数时间戳
+        timestamp = int(updated_at) if not isinstance(updated_at, (int, float)) else updated_at
+        updated_at = datetime.fromtimestamp(timestamp).strftime('%Y-%m-%d %H:%M:%S')
+    except (ValueError, TypeError, OSError):
+        # 如果转换失败，保持原值或显示N/A
+        updated_at = str(updated_at) if updated_at else 'N/A'
+else:
+    updated_at = 'N/A'
 
 # 显示详情
 st.markdown(f"# 📋 {title_prefix} Review详情")

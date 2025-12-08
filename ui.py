@@ -39,7 +39,7 @@ st.set_page_config(layout="wide", page_title="AI代码审查平台", page_icon="
 env_path = PROJECT_ROOT / "conf" / ".env"
 load_dotenv(env_path)
 
-DETAIL_PAGE_PATH = "/审查详情"
+DETAIL_PAGE_PATH = "/review_detail"
 DETAIL_COLUMN_NAME = "详细信息"
 HIDDEN_COLUMNS = ['id', 'review_result']
 JS_INIT_DELAYS = [100, 500]
@@ -331,7 +331,7 @@ def logout():
 def main_page():
     col_title, _, col_logout = st.columns([7, 2, 1.2])
     with col_title:
-        st.markdown("#### 📊 代码审查统计")
+        st.markdown("#### 📊 AI代码审查统计")
     with col_logout:
         if st.button("退出登录", key="logout_button", use_container_width=True):
             logout()

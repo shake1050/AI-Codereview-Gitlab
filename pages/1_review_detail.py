@@ -112,4 +112,3 @@ with col2:
             '<script>window.history.back();</script>',
             unsafe_allow_html=True
         )
-

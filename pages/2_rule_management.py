@@ -113,77 +113,67 @@ def format_timestamp(timestamp):
     return timestamp
 
 
-def show_confirmation_dialog():
-    """显示二次确认对话框"""
-    if 'show_confirm' not in st.session_state or not st.session_state.show_confirm:
-        return
+def show_confirmation_dialog(pending):
+    """显示二次确认对话框（内联在编辑区域下方）"""
+    st.markdown("---")
+    st.warning("### ⚠️ 确认修改")
+    st.markdown("""
+    **重要提示：**
+    - 此操作将立即生效，影响后续所有代码审查
+    - 修改后的规则会立即应用到新的审查请求
+    - 历史审查记录不受影响
+    """)
     
-    if 'pending_update' not in st.session_state:
-        return
+    st.markdown(f"**规则:** {pending['rule_key']}")
+    if pending.get('change_reason'):
+        st.markdown(f"**修改原因:** {pending['change_reason']}")
     
-    pending = st.session_state.pending_update
-    
-    # 使用对话框
-    with st.container():
-        st.markdown("---")
-        st.warning("### ⚠️ 确认修改")
-        st.markdown("""
-        **重要提示：**
-        - 此操作将立即生效，影响后续所有代码审查
-        - 修改后的规则会立即应用到新的审查请求
-        - 历史审查记录不受影响
-        """)
-        
-        st.markdown(f"**规则:** {pending['rule_key']}")
-        if pending.get('change_reason'):
-            st.markdown(f"**修改原因:** {pending['change_reason']}")
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            if st.button("✅ 确认保存", key="confirm_save", use_container_width=True):
-                # 执行保存
-                username = st.session_state.get('username', 'unknown')
-                
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("✅ 确认保存", key="confirm_save", use_container_width=True):
+            # 执行保存
+            username = st.session_state.get('username', 'unknown')
+            
+            try:
+                # 验证Jinja2模板语法
+                from jinja2 import Template
                 try:
-                    # 验证Jinja2模板语法
-                    from jinja2 import Template
-                    try:
-                        Template(pending['system_prompt'])
-                        Template(pending['user_prompt'])
-                    except Exception as e:
-                        st.error(f"❌ 模板语法错误: {e}")
-                        st.info("💡 提示：请检查Jinja2模板语法，确保 {{ }} 和 {% %} 标签正确闭合")
-                        return
-                    
-                    success = RuleService.update_rule(
-                        pending['rule_key'],
-                        pending['system_prompt'],
-                        pending['user_prompt'],
-                        username,
-                        pending.get('change_reason')
-                    )
-                    
-                    if success:
-                        st.success("✅ 规则更新成功！修改已立即生效。")
-                        st.session_state.edit_mode = False
-                        st.session_state.show_confirm = False
-                        st.session_state.pop('pending_update', None)
-                        # 延迟刷新，让用户看到成功消息
-                        import time
-                        time.sleep(1)
-                        st.rerun()
-                    else:
-                        st.error("❌ 规则更新失败，请查看日志获取详细错误信息")
-                        st.info("💡 提示：编辑内容已保留，修复问题后可以重新保存")
-                        
+                    Template(pending['system_prompt'])
+                    Template(pending['user_prompt'])
                 except Exception as e:
-                    st.error(f"❌ 保存失败: {str(e)}")
-                    st.info("💡 提示：编辑内容已保留，请检查输入内容后重试")
-        
-        with col2:
-            if st.button("❌ 取消", key="cancel_save", use_container_width=True):
-                st.session_state.show_confirm = False
-                st.rerun()
+                    st.error(f"❌ 模板语法错误: {e}")
+                    st.info("💡 提示：请检查Jinja2模板语法，确保 {{ }} 和 {% %} 标签正确闭合")
+                    return
+                
+                success = RuleService.update_rule(
+                    pending['rule_key'],
+                    pending['system_prompt'],
+                    pending['user_prompt'],
+                    username,
+                    pending.get('change_reason')
+                )
+                
+                if success:
+                    st.success("✅ 规则更新成功！修改已立即生效。")
+                    st.session_state.edit_mode = False
+                    st.session_state.show_confirm = False
+                    st.session_state.pop('pending_update', None)
+                    # 延迟刷新，让用户看到成功消息
+                    import time
+                    time.sleep(1)
+                    st.rerun()
+                else:
+                    st.error("❌ 规则更新失败，请查看日志获取详细错误信息")
+                    st.info("💡 提示：编辑内容已保留，修复问题后可以重新保存")
+                    
+            except Exception as e:
+                st.error(f"❌ 保存失败: {str(e)}")
+                st.info("💡 提示：编辑内容已保留，请检查输入内容后重试")
+    
+    with col2:
+        if st.button("❌ 取消", key="cancel_save", use_container_width=True):
+            st.session_state.show_confirm = False
+            st.rerun()
 
 
 def rule_management_page():
@@ -195,9 +185,6 @@ def rule_management_page():
     with col_logout:
         if st.button("退出登录", key="logout_button", use_container_width=True):
             logout()
-    
-    # 显示确认对话框（如果需要）
-    show_confirmation_dialog()
     
     st.markdown("---")
     
@@ -318,6 +305,10 @@ def rule_management_page():
                 }
                 st.session_state.show_confirm = True
                 st.rerun()
+        
+        # 在编辑表单下方显示确认对话框
+        if st.session_state.get('show_confirm') and st.session_state.get('pending_update'):
+            show_confirmation_dialog(st.session_state.pending_update)
     
     # 历史记录区域
     st.markdown("---")

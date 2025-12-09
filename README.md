@@ -49,7 +49,7 @@ Note 中（SVN通过日志记录），便于团队查看和处理。
 
 - 克隆项目仓库：
 ```aiignore
-git clone https://github.com/sunmh207/AI-Codereview-Gitlab.git
+git clone https://github.com/shake1050/AI-Codereview-SVN.git
 cd AI-Codereview-Gitlab
 ```
 
@@ -199,21 +199,34 @@ SVN通过post-commit hook触发代码审查。详细配置说明请参考：[SVN
 
 #### VisualSVN Server 快速接入：
 
-1. **使用一键部署脚本**（推荐）：
-   ```powershell
-   # 以管理员身份运行 PowerShell
-   cd tools\hooks_svn
-   .\deploy_hooks_to_all_repos.ps1
-   ```
+1. **配置部署参数**：
+   - 编辑 `tools\hooks_svn\deploy_config.bat`
+   - 设置仓库路径、API地址和SVN服务器地址
+   - 首次部署设置 `SKIP_EXISTING=1`
 
-2. **手动配置**：
+2. **自动部署**（推荐）：
+   ```batch
+   # 以管理员身份运行
+   cd tools\hooks_svn
+   deploy_hooks_to_all_repos.bat
+   ```
+   
+   脚本会自动：
+   - 扫描所有SVN仓库
+   - 部署hook文件到每个仓库
+   - **自动配置API地址和仓库URL**
+   - 验证部署结果
+
+3. **更新配置**：
+   - 修改 `deploy_config.bat` 中的配置
+   - 设置 `SKIP_EXISTING=0`（允许覆盖）
+   - 重新运行部署脚本
+
+4. **手动配置**（不推荐）：
    - 将 `tools\hooks_svn\post-commit.bat` 和 `svn_post_commit_hook.py` 复制到仓库的 `hooks` 目录
    - 编辑 `svn_post_commit_hook.py`，配置 `REVIEW_API_URL` 和 `REPO_URL`
 
-3. **配置环境变量**（可选）：
-   - 在系统环境变量或 VisualSVN Server 服务环境变量中设置 `SVN_REVIEW_API_URL` 和 `SVN_REPO_URL_PREFIX`
-
-详细配置说明请参考：[VisualSVN Server Hook 配置说明](tools/hooks_svn/doc/visualsvn_server_setup.md)
+详细配置说明请参考：[SVN Hook 部署说明](tools/hooks_svn/部署说明.md)
 
 ### 配置消息推送
 

@@ -1,75 +1,85 @@
 @echo off
 REM ============================================================
-REM SVN Hook 一键部署脚本 (批处理版本)
-REM 用于为 VisualSVN Server 的所有仓库自动部署 post-commit hook
+REM SVN Hook Deployment Script (Batch Version)
+REM Auto-deploy post-commit hooks to all VisualSVN Server repositories
 REM ============================================================
 
 setlocal enabledelayedexpansion
 
-REM 配置参数（可根据实际情况修改）
-set REPOSITORIES_PATH=D:\Repositories
+REM Hook scripts directory
 set HOOK_SCRIPTS_PATH=%~dp0
 
-REM 颜色输出（如果支持）
-set "GREEN=[92m"
-set "RED=[91m"
-set "YELLOW=[93m"
-set "CYAN=[96m"
-set "RESET=[0m"
+REM Load configuration file
+set CONFIG_FILE=%HOOK_SCRIPTS_PATH%deploy_config.bat
+if exist "%CONFIG_FILE%" (
+    call "%CONFIG_FILE%"
+    echo [INFO] Loaded config from deploy_config.bat
+) else (
+    echo [WARNING] Config file not found, using defaults
+    REM Default configuration
+    set REPOSITORIES_PATH=D:\Repositories
+    set REVIEW_API_URL=http://10.10.9.12:5001/review/webhook
+    set SVN_SERVER_URL=http://10.10.9.12/svn
+    set SKIP_EXISTING=1
+)
+
+REM Color codes removed for compatibility
 
 echo.
 echo ========================================
-echo SVN Hook 一键部署脚本
+echo SVN Hook Deployment Script
 echo ========================================
 echo.
 
-REM 检查管理员权限
+REM Check administrator privileges
 net session >nul 2>&1
 if errorlevel 1 (
-    echo [警告] 建议以管理员权限运行此脚本
+    echo [WARNING] Recommend running as administrator
     echo.
 )
 
-REM 验证仓库目录
+REM Validate repository directory
 if not exist "%REPOSITORIES_PATH%" (
-    echo [错误] 仓库目录不存在: %REPOSITORIES_PATH%
-    echo 请检查 VisualSVN Server 的仓库路径，或修改脚本中的 REPOSITORIES_PATH 变量
+    echo [ERROR] Repository directory not found: %REPOSITORIES_PATH%
+    echo Please check VisualSVN Server repository path or modify REPOSITORIES_PATH
     pause
     exit /b 1
 )
 
-echo [信息] 仓库目录: %REPOSITORIES_PATH%
-echo [信息] Hook脚本目录: %HOOK_SCRIPTS_PATH%
+echo [INFO] Repository Path: %REPOSITORIES_PATH%
+echo [INFO] Hook Scripts Path: %HOOK_SCRIPTS_PATH%
+echo [INFO] Review API URL: %REVIEW_API_URL%
+echo [INFO] SVN Server URL: %SVN_SERVER_URL%
 echo.
 
-REM 验证Hook脚本文件
+REM Validate hook script files
 set POST_COMMIT_BAT=%HOOK_SCRIPTS_PATH%post-commit.bat
 set SVN_HOOK_PY=%HOOK_SCRIPTS_PATH%svn_post_commit_hook.py
 
 if not exist "%POST_COMMIT_BAT%" (
-    echo [错误] 找不到 post-commit.bat 文件: %POST_COMMIT_BAT%
+    echo [ERROR] post-commit.bat not found: %POST_COMMIT_BAT%
     pause
     exit /b 1
 )
 
 if not exist "%SVN_HOOK_PY%" (
-    echo [错误] 找不到 svn_post_commit_hook.py 文件: %SVN_HOOK_PY%
+    echo [ERROR] svn_post_commit_hook.py not found: %SVN_HOOK_PY%
     pause
     exit /b 1
 )
 
-echo [成功] Hook脚本文件验证通过
+echo [SUCCESS] Hook script files validated
 echo.
 
-REM 统计信息
+REM Statistics
 set TOTAL=0
 set SUCCESS=0
 set SKIPPED=0
 set FAILED=0
 
-REM 检查指定路径本身是否是仓库（包含conf目录）
+REM Check if path itself is a repository (contains conf directory)
 if exist "%REPOSITORIES_PATH%\conf" (
-    REM 路径本身是仓库，直接处理
+    REM Path is a repository, process directly
     for %%P in ("%REPOSITORIES_PATH%") do set REPO_NAME=%%~nxP
     set REPO_PATH=%REPOSITORIES_PATH%
     set HOOKS_DIR=!REPO_PATH!\hooks
@@ -78,16 +88,16 @@ if exist "%REPOSITORIES_PATH%\conf" (
     set IS_VALID_REPO=1
     set PROCESS_SINGLE_REPO=1
 ) else (
-    REM 路径包含多个仓库，遍历子目录
+    REM Path contains multiple repositories, traverse subdirectories
     set PROCESS_SINGLE_REPO=0
 )
 
-REM 处理单个仓库或遍历多个仓库
+REM Process single repository or traverse multiple repositories
 if !PROCESS_SINGLE_REPO! equ 1 (
-    REM 处理单个仓库
+    REM Process single repository
     call :process_repo
 ) else (
-    REM 遍历所有仓库
+    REM Traverse all repositories
     for /d %%R in ("%REPOSITORIES_PATH%\*") do (
         set REPO_NAME=%%~nxR
         set REPO_PATH=%%R
@@ -95,7 +105,7 @@ if !PROCESS_SINGLE_REPO! equ 1 (
         set TARGET_BAT=!HOOKS_DIR!\post-commit.bat
         set TARGET_PY=!HOOKS_DIR!\svn_post_commit_hook.py
         
-        REM 检查是否是有效的SVN仓库（包含conf或hooks目录）
+        REM Check if valid SVN repository (contains conf or hooks directory)
         if exist "!REPO_PATH!\conf" (
             set IS_VALID_REPO=1
         ) else if exist "!HOOKS_DIR!" (
@@ -104,7 +114,7 @@ if !PROCESS_SINGLE_REPO! equ 1 (
             set IS_VALID_REPO=0
         )
         
-        REM 处理仓库
+        REM Process repository
         call :process_repo
     )
 )
@@ -112,76 +122,89 @@ if !PROCESS_SINGLE_REPO! equ 1 (
 goto :end_processing
 
 :process_repo
-REM 处理单个仓库的子程序
+REM Subroutine to process single repository
 if !IS_VALID_REPO! equ 1 (
     set /a TOTAL+=1
     
     echo ----------------------------------------
-    echo [信息] 处理仓库: !REPO_NAME!
+    echo [INFO] Processing repository: !REPO_NAME!
     
-    REM 创建hooks目录（如果不存在）
+    REM Create hooks directory if not exists
     if not exist "!HOOKS_DIR!" (
-        echo [信息]   创建hooks目录...
+        echo [INFO]   Creating hooks directory...
         mkdir "!HOOKS_DIR!" >nul 2>&1
         if errorlevel 1 (
-            echo [错误]   无法创建hooks目录
+            echo [ERROR]   Failed to create hooks directory
             set /a FAILED+=1
             exit /b
         )
-        echo [成功]   hooks目录已创建
+        echo [SUCCESS]   Hooks directory created
     )
     
-    REM 检查文件是否已存在
+    REM Check if files already exist
     set BAT_EXISTS=0
     set PY_EXISTS=0
     if exist "!TARGET_BAT!" set BAT_EXISTS=1
     if exist "!TARGET_PY!" set PY_EXISTS=1
     
-    REM 如果文件都已存在，跳过整个仓库
-    if !BAT_EXISTS! equ 1 if !PY_EXISTS! equ 1 (
-        echo [警告]   Hook文件已存在，跳过此仓库
-        set /a SKIPPED+=1
-        exit /b
+    REM Decide whether to skip based on configuration
+    if "%SKIP_EXISTING%"=="1" (
+        REM Skip if both files exist
+        if !BAT_EXISTS! equ 1 if !PY_EXISTS! equ 1 (
+            echo [WARNING]   Hook files exist, skipping
+            set /a SKIPPED+=1
+            exit /b
+        )
+        
+        REM Skip if only one file exists (for consistency)
+        if !BAT_EXISTS! equ 1 (
+            echo [WARNING]   post-commit.bat exists, skipping
+            set /a SKIPPED+=1
+            exit /b
+        )
+        
+        if !PY_EXISTS! equ 1 (
+            echo [WARNING]   svn_post_commit_hook.py exists, skipping
+            set /a SKIPPED+=1
+            exit /b
+        )
+    ) else (
+        if !BAT_EXISTS! equ 1 if !PY_EXISTS! equ 1 (
+            echo [INFO]   Hook files exist, will overwrite
+        )
     )
     
-    REM 如果只有一个文件存在，也跳过（保持一致性）
-    if !BAT_EXISTS! equ 1 (
-        echo [警告]   post-commit.bat 已存在，跳过此仓库
-        set /a SKIPPED+=1
-        exit /b
-    )
-    
-    if !PY_EXISTS! equ 1 (
-        echo [警告]   svn_post_commit_hook.py 已存在，跳过此仓库
-        set /a SKIPPED+=1
-        exit /b
-    )
-    
-    REM 部署文件
-    REM 复制 post-commit.bat
-    echo [信息]   部署 post-commit.bat...
-    copy /Y "%POST_COMMIT_BAT%" "!TARGET_BAT!" >nul 2>&1
+    REM Deploy files
+    REM Copy post-commit.bat (binary copy to preserve original)
+    echo [INFO]   Deploying post-commit.bat...
+    copy /B /Y "%POST_COMMIT_BAT%" "!TARGET_BAT!" >nul 2>&1
     if errorlevel 1 (
-        echo [错误]   复制 post-commit.bat 失败
+        echo [ERROR]   Failed to copy post-commit.bat
         set /a FAILED+=1
     ) else (
-        echo [成功]   post-commit.bat 部署成功
+        echo [SUCCESS]   post-commit.bat deployed
         
-        REM 复制 svn_post_commit_hook.py
-        echo [信息]   部署 svn_post_commit_hook.py...
-        copy /Y "%SVN_HOOK_PY%" "!TARGET_PY!" >nul 2>&1
+        REM Copy and configure svn_post_commit_hook.py
+        echo [INFO]   Deploying and configuring svn_post_commit_hook.py...
+        set REPO_FULL_URL=%SVN_SERVER_URL%/!REPO_NAME!/
+        
+        REM Use PowerShell to copy and modify config (preserve UTF-8 encoding)
+        powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Stop'; try { $content = [System.IO.File]::ReadAllText('%SVN_HOOK_PY%', [System.Text.UTF8Encoding]::new($false)); $content = $content -replace 'REVIEW_API_URL = os\.getenv\(''SVN_REVIEW_API_URL'', \".*?\"\)', 'REVIEW_API_URL = os.getenv(''SVN_REVIEW_API_URL'', \"!REVIEW_API_URL!\")'; $content = $content -replace 'REPO_URL = os\.getenv\(''SVN_REPO_URL'', \".*?\"\)', 'REPO_URL = os.getenv(''SVN_REPO_URL'', \"!REPO_FULL_URL!\")'; [System.IO.File]::WriteAllText('!TARGET_PY!', $content, [System.Text.UTF8Encoding]::new($false)); exit 0 } catch { Write-Error $_.Exception.Message; exit 1 }"
+        
         if errorlevel 1 (
-            echo [错误]   复制 svn_post_commit_hook.py 失败
+            echo [ERROR]   Failed to deploy svn_post_commit_hook.py
             set /a FAILED+=1
         ) else (
-            echo [成功]   svn_post_commit_hook.py 部署成功
+            echo [SUCCESS]   svn_post_commit_hook.py deployed and configured
+            echo [INFO]   Config: !REPO_FULL_URL!
+        )
             
-            REM 验证文件
+            REM Verify files
             if exist "!TARGET_BAT!" if exist "!TARGET_PY!" (
-                echo [成功]   仓库 !REPO_NAME! 的Hook部署完成
+                echo [SUCCESS]   Repository !REPO_NAME! hook deployment complete
                 set /a SUCCESS+=1
             ) else (
-                echo [错误]   文件部署后验证失败
+                echo [ERROR]   File verification failed
                 set /a FAILED+=1
             )
         )
@@ -190,34 +213,34 @@ if !IS_VALID_REPO! equ 1 (
 exit /b
 
 :end_processing
-REM 输出统计信息
+REM Output statistics
 echo.
 echo ========================================
-echo 部署完成统计
+echo Deployment Statistics
 echo ========================================
-echo [信息] 总仓库数: %TOTAL%
-echo [成功] 成功: %SUCCESS%
-echo [警告] 跳过: %SKIPPED%
+echo [INFO] Total repositories: %TOTAL%
+echo [SUCCESS] Successful: %SUCCESS%
+echo [WARNING] Skipped: %SKIPPED%
 if %FAILED% gtr 0 (
-    echo [错误] 失败: %FAILED%
+    echo [ERROR] Failed: %FAILED%
 )
 echo.
 
-REM 提示后续操作
+REM Next steps
 if %SUCCESS% gtr 0 (
     echo ========================================
-    echo 后续操作提示
+    echo Next Steps
     echo ========================================
-    echo [信息] 1. 检查每个仓库的 svn_post_commit_hook.py 配置：
-    echo [信息]    - REVIEW_API_URL: AI代码审查系统API地址
-    echo [信息]    - REPO_URL: SVN仓库URL（需要根据实际仓库修改）
+    echo [INFO] 1. Configuration has been auto-updated in each repository
+    echo [INFO]    - REVIEW_API_URL: %REVIEW_API_URL%
+    echo [INFO]    - REPO_URL: Auto-generated based on repository name
     echo.
-    echo [信息] 2. 可以通过环境变量配置（推荐）：
-    echo [信息]    - SVN_REVIEW_API_URL: 审查系统API地址
-    echo [信息]    - SVN_REPO_URL: 仓库URL（或让脚本自动生成）
+    echo [INFO] 2. To modify configuration:
+    echo [INFO]    - Edit deploy_config.bat and set SKIP_EXISTING=0
+    echo [INFO]    - Or use environment variables SVN_REVIEW_API_URL and SVN_REPO_URL
     echo.
-    echo [信息] 3. 测试Hook是否正常工作：
-    echo [信息]    在任意仓库中提交代码，检查审查系统是否收到webhook
+    echo [INFO] 3. Test the hook:
+    echo [INFO]    Commit code to any repository and check if review system receives webhook
     echo.
 )
 

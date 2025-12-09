@@ -52,7 +52,7 @@ RETRY_DELAY = 5  # 秒
 LOG_FILE = None  # 例如: "/var/log/svn/post-commit.log"
 
 # 其他配置常量
-WEBHOOK_TIMEOUT = 30  # 秒
+WEBHOOK_TIMEOUT = 120  # 秒 - 增加超时时间以适应AI审查的处理时间
 SVNLOOK_COMMAND = 'svnlook'
 # ==================== 配置区域结束 ====================
 
